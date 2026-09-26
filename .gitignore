@@ -1,0 +1,23 @@
+# 本地构建产物
+.build/
+
+# 下载下来的源码 / 产物（校验和记在各自包的 sources 文件里，不入库）
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
+*.zip
+
+# 打出来的包
+*.rpm
+*.src.rpm
+
+# 下载到包目录里的上游源文件（校验和记在各包的 sources 里）
+# 确实需要入库时用 git add -f
+LICENSE
+LICENSE-*
+*.metainfo.xml.in
+
+# 生成物
+*.metainfo.xml
+release.json
