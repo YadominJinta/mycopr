@@ -175,6 +175,9 @@ sudo dnf install zed
   普通用户也写不进去），升级走 dnf。
 - `dictionaries` / `hyphenation` 软链到系统的 `/usr/share/hunspell`、`/usr/share/hyphen`，
   系统装的拼写词典就能用上（上游 tarball 不带词典）。
+- `%check` 会真的把浏览器跑一次（`zen --version`），所以 BuildRequires 里带了 gtk3、alsa-lib、
+  libX11-xcb。注意 Fedora 构建 root 关掉了 weak deps，libX11-xcb 不会被 gtk3 拖进来，
+  必须显式写（第一次提交就栽在这里：chroot 里缺它，冒烟测试起不来）。
 - 版本号形如 `1.22.3b`（Zen 的 stable 通道就带这个 b 后缀），rpm 会比较成「比 1.22.3 新」，
   update.sh 直接拿 release 的 tag 当版本号（它没有 `v` 前缀）。
 - tarball 里带一套自己的 NSS/NSPR，我们没有换成系统的（AUR 会 symlink 系统的

@@ -61,9 +61,12 @@ Source7:        policies.json
 
 BuildRequires:  desktop-file-utils
 BuildRequires:  libappstream-glib
-# 这两个只为 check 段里跑一次 --version：启动器要加载 libxul.so，需要 gtk3 和 alsa
+# 下面三个只为 check 段里跑一次 --version：启动器要加载 libxul.so，
+# 需要 gtk3、alsa 和 libX11-xcb（最后这个在 Fedora 构建 root 里不会被 gtk3 拖进来，
+# 因为构建 root 关掉了 weak deps）
 BuildRequires:  gtk3
 BuildRequires:  alsa-lib
+BuildRequires:  libX11-xcb
 
 ExclusiveArch:  x86_64 aarch64
 
@@ -126,7 +129,8 @@ install -Dpm 0644 %{_sourcedir}/LICENSE %{buildroot}%{_datadir}/licenses/%{name}
 
 %check
 export HOME=$(mktemp -d)
-# 启动器跑得起来（会加载 libxul.so，所以 BuildRequires 里带了 gtk3/alsa-lib）
+
+# 启动器跑得起来（会加载 libxul.so，所以上面 BuildRequires 里带了它的几个运行时库）
 %{buildroot}%{appdir}/zen --version
 
 # spec 版本要和包里的 application.ini 一致
