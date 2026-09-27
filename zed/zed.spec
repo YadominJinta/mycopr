@@ -8,8 +8,15 @@
 #   /usr/lib64/zed/bin/zed              CLI，rpath = $ORIGIN/../lib
 #   /usr/lib64/zed/libexec/zed-editor   编辑器本体，rpath = $ORIGIN/../lib
 #   /usr/lib64/zed/lib/*.so*            上游自带的 .so（libstdc++、libxcb、libxkbcommon…）
-# CLI 会在「自己所在目录/../libexec」里找 zed-editor（crates/cli/src/main.rs），
+# CLI 会在「自己所在目录的 ../libexec」里找 zed-editor（crates/cli/src/main.rs），
 # 两个二进制又用 $ORIGIN 相对路径找自己的 .so，所以整棵树必须一起装、不能拆。
+#
+# 注意：COPR 一次构建只生成、只使用一个 SRPM，所有 chroot 共用它（官方文档：
+# "The SRPM is downloaded once per build, regardless of the number of chroots"）。
+# 所以 Source 的文件名/URL 不能跟着构建架构变 —— 那个 SRPM 只会在某一个架构的
+# srpm-build chroot 里生成，另一个架构去建 SRPM 时就找不到自己的包，报
+# "Bad file: .../zed-linux-xxx.tar.gz: No such file or directory"。
+# 正确做法是两个架构都放进 SRPM，构建时用 ifarch 选一个解包。
 # ---------------------------------------------------------------------------
 
 %global app_id      dev.zed.Zed
@@ -32,10 +39,18 @@ Summary:        High-performance, multiplayer code editor
 License:        GPL-3.0-or-later AND Apache-2.0
 URL:            https://zed.dev
 
-Source0:        https://github.com/%{upstream_gh}/releases/download/v%{version}/zed-linux-%{_arch}.tar.gz
-Source1:        https://raw.githubusercontent.com/%{upstream_gh}/v%{version}/crates/zed/resources/flatpak/zed.metainfo.xml.in
-Source2:        https://raw.githubusercontent.com/%{upstream_gh}/v%{version}/LICENSE-APACHE
-Source3:        https://raw.githubusercontent.com/%{upstream_gh}/v%{version}/LICENSE-GPL
+Source0:        https://github.com/%{upstream_gh}/releases/download/v%{version}/zed-linux-x86_64.tar.gz
+Source1:        https://github.com/%{upstream_gh}/releases/download/v%{version}/zed-linux-aarch64.tar.gz
+Source2:        https://raw.githubusercontent.com/%{upstream_gh}/v%{version}/crates/zed/resources/flatpak/zed.metainfo.xml.in
+Source3:        https://raw.githubusercontent.com/%{upstream_gh}/v%{version}/LICENSE-APACHE
+Source4:        https://raw.githubusercontent.com/%{upstream_gh}/v%{version}/LICENSE-GPL
+
+# 真正要解包的那个（两个 tarball 都在 SRPM 里，见文件头说明）
+%ifarch x86_64
+%global zed_tarball zed-linux-x86_64.tar.gz
+%else
+%global zed_tarball zed-linux-aarch64.tar.gz
+%endif
 
 BuildRequires:  desktop-file-utils
 BuildRequires:  gettext-envsubst
@@ -53,9 +68,13 @@ libstdc++、libxcb、libxkbcommon 等库放在 %{_libdir}/zed/lib 私有目录�
 不会被其它程序加载。请用 dnf 升级，不要用 Zed 自己的更新/卸载手段。
 
 %prep
-# 压缩包顶层目录就是 zed.app；用 -c 解到 zed-%{version}/ 里，
-# 这样 %build/%install 的工作目录就在包目录，不会被 cd 进 zed.app
-%setup -q -c -n %{name}-%{version}
+# 不用 setup 宏：tarball 直接解到构建目录（也就是这里），里面直接就是 zed.app/，
+# 省得纠结 -c/-n/-T 和 buildsubdir 的差异（rpm 6 的 setup 行为和文档写的不太一样）。
+# 坑：spec 注释里的宏也会被展开，所以注释里千万别出现宏写法（否则会被静默替换成
+# 一段脚本）——踩过一次，表现是构建时莫名报 "cd zed-1.21.0: No such file or directory"。
+# 两个架构的包都在 SRPM 里，这里只解当前架构那一个。
+rm -rf zed.app
+tar -xf %{_sourcedir}/%{zed_tarball}
 
 %build
 # 纯重打包，没有编译步骤
@@ -107,6 +126,14 @@ export HOME=$(mktemp -d) ZED_ALLOW_ROOT=true
 # 那些交给 RPM 自动生成的依赖，不在这里判。
 ldd_out=$(ldd %{buildroot}%{_libdir}/zed/libexec/zed-editor 2>/dev/null)
 test -n "$ldd_out"
+
+# 防呆：确认装进去的确实是本架构的二进制（万一 Source 选错了，这里会炸）
+%ifarch x86_64
+echo "$ldd_out" | grep -q 'ld-linux-x86-64'
+%else
+echo "$ldd_out" | grep -q 'ld-linux-aarch64'
+%endif
+
 missing=$(echo "$ldd_out" | awk '/not found/ {print $1}')
 for so in %{buildroot}%{_libdir}/zed/lib/*.so*; do
     so=$(basename "$so")

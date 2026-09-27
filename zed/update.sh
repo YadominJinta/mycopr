@@ -67,7 +67,8 @@ fi
 [[ $check_only -eq 1 ]] && exit 0
 
 # ---- sources ---------------------------------------------------------------
-# 架构 tarball：优先用 GitHub API 给的 digest（省掉 240MB 下载）
+# 架构 tarball：优先用 GitHub API 给的 digest（省掉 240MB 下载）。
+# 两个架构都写成 all：COPR 一次构建只生成一个 SRPM 给所有 chroot 用，SRPM 里两个包都得有。
 python3 - "$version" "$tmp/release.json" > "$tmp/arch_rows" <<'PY'
 import json, sys
 version, path = sys.argv[1], sys.argv[2]
@@ -79,7 +80,7 @@ for arch in ("x86_64", "aarch64"):
     if asset is None:
         sys.exit(f"错误: release 里没有 {name}")
     digest = (asset.get("digest") or "").removeprefix("sha256:")
-    rows.append("\t".join([name, arch, digest, asset["browser_download_url"]]))
+    rows.append("\t".join([name, "all", digest, asset["browser_download_url"]]))
 print("\n".join(rows))
 PY
 
@@ -119,6 +120,9 @@ done < "$tmp/arch_rows"
 {
     echo "# 每行: <文件名>  <架构(all|x86_64|aarch64)>  <sha256>  <URL>"
     echo "# 由 update.sh 自动生成，手工改的话记得同步 spec 里的 Source。"
+    echo "#"
+    echo "# 注意 zed 的两个 tarball 都写成 all：COPR 一次构建只生成一个 SRPM、所有 chroot 共用，"
+    echo "# 所以 SRPM 里必须两个架构的包都有，构建时由 spec 用 %ifarch 选一个解包。"
     cat "$tmp/arch_rows" "$tmp/extra_rows"
 } > "$sources_file"
 echo "已更新 $sources_file"

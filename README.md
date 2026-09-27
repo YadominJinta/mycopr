@@ -54,6 +54,13 @@ sudo dnf install mock rpmlint                   # 可选：mock 构建 / 静态�
 COPR 每次构建会：调用 `.copr/Makefile` → `scripts/make-srpm.sh` →
 `scripts/fetch-sources.sh` 按 `zed/sources` 下载并校验 sha256 → `rpmbuild -bs` → 构建 RPM。
 
+> ⚠ **一次 build 只生成一个 SRPM，所有 chroot 共用**（COPR 官方文档：
+> "The SRPM is downloaded once per build, regardless of the number of chroots"）。
+> 所以 spec 里的 `Source` 文件名/URL **不能按 `%{_arch}` 变**——否则 SRPM 只在某一个架构的
+> srpm-build chroot 里生成，另一个架构去 `rpmbuild -bs` 时就会报
+> `Bad file: .../xxx-<arch>.tar.gz: No such file or directory`。
+> 架构相关的源码要两个都写进 `Source`（都标 `all`），构建时用 `%ifarch` 选：见 `zed/zed.spec`。
+
 ## 本地构建
 
 ```bash
@@ -115,6 +122,9 @@ sudo dnf install zed
 
 - **重打包二进制，不是源码构建。** 上游只发 `zed-linux-{x86_64,aarch64}.tar.gz`，
   从源码构建要 cargo vendor 源 + 几小时构建 + 大内存，COPR 上很折腾，所以这里直接重打包官方产物。
+- **两个架构的 tarball 都在 SRPM 里。** COPR 一次 build 只生成一个 SRPM 给所有 chroot 用
+  （见上文），所以 `Source0`/`Source1` 分别是 x86_64/aarch64 的包，`%prep` 里用 `%ifarch`
+  选一个解包。SRPM 因此有 ~250MB，但只解一个，构建时间不受影响。
 - **目录布局不能改。** 两个二进制（`bin/zed` CLI 和 `libexec/zed-editor` 编辑器）的 rpath 都是
   `$ORIGIN/../lib`，CLI 还会在「自己所在目录的 `../libexec`」里找编辑器实例
   （见上游 `crates/cli/src/main.rs`）。所以整棵 `zed.app` 树一起装在
@@ -130,8 +140,9 @@ sudo dnf install zed
   建议把旧的删掉免得两套混用。
 - Desktop 文件、图标、AppStream 元数据都装了（软件中心里能看到 Zed），
   desktop 文件用 `desktop-file-validate` 校验过。
-- 构建时 `%check` 会跑 `zed --version`（构建机是 root，所以要 `ZED_ALLOW_ROOT=true`）
-  并检查自带 .so 是否都能加载。
+- 构建时 `%check` 会跑 `zed --version`（构建机是 root，所以要 `ZED_ALLOW_ROOT=true`）、
+  检查自带 .so 是否都能加载，并确认装进去的确实是本架构的二进制（`ld-linux-x86-64` /
+  `ld-linux-aarch64`），防止 Source 选错时静默打出跨架构的包。
 
 ## 已本地验证
 
