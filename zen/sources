@@ -1,0 +1,11 @@
+# 每行: <文件名>  <架构(all|x86_64|aarch64)>  <sha256>  <URL>
+# 由 update.sh 自动生成，手工改的话记得同步 spec 里的 Source。
+#
+# 两个 tarball 都写成 all：COPR 一次构建只生成一个 SRPM、所有 chroot 共用，
+# 所以 SRPM 里必须两个架构的包都有，构建时由 spec 用 ifarch 选一个解包。
+zen.linux-x86_64.tar.xz	all	0aaee1b3f67f074aebf7fc6c2fe824441bcafd431e9991336479c16370519dd0	https://github.com/zen-browser/desktop/releases/download/1.22.3b/zen.linux-x86_64.tar.xz
+zen.linux-aarch64.tar.xz	all	bffbf418881d46963c5ec00cb0de05e7a06f77b2aefc8710a503bcfb79086c7d	https://github.com/zen-browser/desktop/releases/download/1.22.3b/zen.linux-aarch64.tar.xz
+app.zen_browser.zen.desktop	all	14777557b684e85a5c91073d272bbb4b3297d52fe27dd5a5f85e66480d4c799b	https://raw.githubusercontent.com/zen-browser/flatpak/1.22.3b/app.zen_browser.zen.desktop
+app.zen_browser.zen.metainfo.xml	all	7387200fa6660eb42d0ad256c0256cbe1cd7496a26c7f92eb9c8cd9c968048c5	https://raw.githubusercontent.com/zen-browser/flatpak/1.22.3b/app.zen_browser.zen.metainfo.xml
+app.zen_browser.zen.svg	all	a03f440c7cefdbd9a1646296d12344b3a0a41920ce4198a9bee4f4dc890cb6a5	https://raw.githubusercontent.com/zen-browser/flatpak/1.22.3b/icons/app.zen_browser.zen.svg
+LICENSE	all	c76f740d1521b9bed9ca7a04ad526c310493c62621b1341d623b431736533b30	https://raw.githubusercontent.com/zen-browser/desktop/1.22.3b/LICENSE

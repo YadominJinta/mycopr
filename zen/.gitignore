@@ -1,0 +1,5 @@
+# 从上游下载的文件（校验和都记在 sources 里，不入库）
+# tarball 由根目录的 *.tar.xz 规则忽略，metainfo.xml / LICENSE 由根目录的
+# *.metainfo.xml、LICENSE* 规则忽略，这里把剩下的补上。
+app.zen_browser.zen.desktop
+app.zen_browser.zen.svg
