@@ -1,0 +1,157 @@
+# 每周自动把各个包跟到上游最新版本：跑每个包目录里的 update.sh，
+# 有变化就提交推送（推完 COPR 的 webhook 会自己重建，见 README）。
+#
+# 加新包不用改这个文件：目录里有 update.sh 就会被带上。
+#
+# 想改成「开 PR 让我 review」而不是直接推 master，把最后那个提交步骤换成
+# peter-evans/create-pull-request，并把 permissions 加上 pull-requests: write。
+name: update-versions
+
+on:
+  schedule:
+    # 每周一 06:00 UTC（北京时间 14:00）
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-versions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash --noprofile --norc -eo pipefail {0}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 逐个包跑 update.sh
+        run: |
+          set -euo pipefail
+          bumped=()
+          failed=()
+
+          for dir in */; do
+            pkg=${dir%/}
+            if [[ ! -f $pkg/update.sh ]]; then
+              continue
+            fi
+
+            spec=$(ls "$pkg"/*.spec)
+            before=$(awk -F': *' '/^Version:/{print $2; exit}' "$spec")
+
+            echo "::group::更新 $pkg（当前 $before）"
+            if (cd "$pkg" && ./update.sh); then
+              after=$(awk -F': *' '/^Version:/{print $2; exit}' "$spec")
+              if [[ $before != "$after" ]]; then
+                bumped+=("$pkg: $before -> $after")
+              fi
+            else
+              # 单个包失败（上游 API 抽风、tag 还没生成…）不影响别的包
+              failed+=("$pkg")
+              echo "::warning::$pkg 更新失败，跳过"
+            fi
+            echo "::endgroup::"
+          done
+
+          {
+            echo "### 自动更新结果"
+            echo
+            if [[ ${#bumped[@]} -gt 0 ]]; then
+              printf -- '- %s\n' "${bumped[@]}"
+            else
+              echo '- 没有新版本'
+            fi
+            if [[ ${#failed[@]} -gt 0 ]]; then
+              printf -- '- ⚠️ 更新失败：%s\n' "${failed[*]}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ ${#bumped[@]} -gt 0 ]]; then
+            printf -- '- %s\n' "${bumped[@]}" > /tmp/bumped.txt
+          fi
+          if [[ ${#failed[@]} -gt 0 ]]; then
+            printf '%s\n' "${failed[@]}" > /tmp/failed.txt
+          fi
+
+      - name: 校验改动
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "没有变化，跳过校验"
+            exit 0
+          fi
+
+          echo "改动的文件："
+          git diff --name-only | sed 's/^/  /'
+
+          # sources 清单格式：每行 4 列（文件名 / 架构 / sha256 / URL），注释和空行例外
+          for src in $(git diff --name-only -- '*/sources'); do
+            awk -F'\t' '
+              /^#/ || NF == 0 { next }
+              NF != 4 || $3 !~ /^[0-9a-f]{64}$/ { print "  坏行: " $0; bad = 1 }
+              END { exit bad }
+            ' "$src" || { echo "::error::$src 格式不对"; exit 1; }
+            echo "  $src OK（$(grep -cvE '^#|^$' "$src") 条）"
+          done
+
+          # 版本号和 sources 里的 URL 要对得上（防止 update.sh 只改了一半）
+          for spec in $(git diff --name-only -- '*.spec'); do
+            pkg=$(dirname "$spec")
+            version=$(awk -F': *' '/^Version:/{print $2; exit}' "$spec")
+            grep -q "/$version/" "$pkg/sources" \
+              || { echo "::error::$pkg/sources 里找不到版本 $version，更新不完整"; exit 1; }
+            echo "  $spec Version=$version OK"
+          done
+
+      - name: 提交并推送
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "没有变化，不提交"
+            exit 0
+          fi
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+
+          # 兜一层：别把大文件带进历史（.gitignore 本该挡住，历史是删不掉的）
+          while read -r f; do
+            if [[ ! -f $f ]]; then
+              continue
+            fi
+            size=$(stat -c %s "$f")
+            if (( size > 5 * 1024 * 1024 )); then
+              echo "::error::$f 有 $((size / 1024 / 1024))MB，疑似误提交，先停下"
+              exit 1
+            fi
+          done < <(git diff --cached --name-only)
+
+          {
+            echo 'chore: 每周自动更新上游版本'
+            echo
+            if [[ -f /tmp/bumped.txt ]]; then
+              cat /tmp/bumped.txt
+            fi
+          } > /tmp/commit-msg.txt
+
+          git commit -F /tmp/commit-msg.txt
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+          echo "已推送，COPR 那边配了 webhook 的话会自动开始重建"
+
+      - name: 有失败的包就报错
+        if: always()
+        run: |
+          set -euo pipefail
+          if [[ ! -f /tmp/failed.txt ]]; then
+            exit 0
+          fi
+          echo "::error::这些包这次没更新成功，需要手工看一眼：$(tr '\n' ' ' < /tmp/failed.txt)"
+          exit 1

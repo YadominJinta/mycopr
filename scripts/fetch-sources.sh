@@ -11,6 +11,10 @@
 # 用法:
 #   fetch-sources.sh <spec 路径> [输出目录]
 #   fetch-sources.sh --all-arches <spec 路径> [输出目录]   # 维护时把两个架构都拉下来
+#
+# 下载策略：先下到 <文件>.part 并校验，通过才改名成正式文件。
+# 这样断点续传不会把「上一个版本的旧文件」当成半成品接着下
+# （上游换版本、文件名不变时会踩到：旧文件哈希对不上，但字节数还是旧的）。
 
 set -euo pipefail
 
@@ -37,20 +41,47 @@ arch=$(rpm --eval '%{_arch}' 2>/dev/null | tail -n1)
 
 mkdir -p "$outdir"
 
+verify() {  # verify <sha256> <文件>
+    printf '%s  %s\n' "$1" "$2" | sha256sum --check --status 2>/dev/null
+}
+
+fetch() {   # fetch <文件名> <URL> <sha256>
+    local filename=$1 url=$2 sha256=$3
+    local target=$outdir/$filename
+    local part=$target.part
+
+    if [[ -f $target ]] && verify "$sha256" "$target"; then
+        echo "已存在，校验通过: $filename"
+        return 0
+    fi
+
+    if [[ -f $part ]] && verify "$sha256" "$part"; then
+        echo "上次已经下完: $filename"
+    else
+        echo "下载 $filename"
+        curl --fail --location --retry 3 --retry-delay 5 --retry-all-errors \
+            --continue-at - --output "$part" "$url"
+        if ! verify "$sha256" "$part"; then
+            # 续传下来的半成品可能来自别的内容，老老实实重头下一次
+            echo "校验不符，重新完整下载: $filename"
+            rm -f "$part"
+            curl --fail --location --retry 3 --retry-delay 5 --retry-all-errors \
+                --output "$part" "$url"
+        fi
+    fi
+
+    if ! verify "$sha256" "$part"; then
+        echo "错误: $filename 的 sha256 和 sources 里记的对不上" >&2
+        exit 1
+    fi
+    mv -f "$part" "$target"
+    echo "$filename: OK"
+}
+
 while read -r filename row_arch sha256 url; do
     case ${filename:-} in ''|\#*) continue ;; esac
     if [[ $fetch_all -eq 0 && $row_arch != all && $row_arch != "$arch" ]]; then
         continue
     fi
-
-    target=$outdir/$filename
-    if [[ -f $target ]] && printf '%s  %s\n' "$sha256" "$target" | sha256sum --check --status 2>/dev/null; then
-        echo "已存在且校验通过: $filename"
-        continue
-    fi
-
-    echo "下载 $filename"
-    curl --fail --location --retry 3 --retry-delay 5 --continue-at - \
-        --output "$target" "$url"
-    printf '%s  %s\n' "$sha256" "$target" | sha256sum --check -
+    fetch "$filename" "$url" "$sha256"
 done < "$sources_file"

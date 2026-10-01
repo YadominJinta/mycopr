@@ -5,13 +5,15 @@ spec 和下载清单入库，源码/产物不入库。
 
 | 包 | 版本 | 上游 | 打包形式 |
 | --- | --- | --- | --- |
-| `zed` | 1.21.0 | [zed-industries/zed](https://github.com/zed-industries/zed) | 重打包官方预编译 tarball |
+| `zed` | 1.22.0 | [zed-industries/zed](https://github.com/zed-industries/zed) | 重打包官方预编译 tarball |
 | `zen-browser` | 1.22.3b | [zen-browser/desktop](https://github.com/zen-browser/desktop) | 重打包官方预编译 tarball |
 
 ## 目录结构
 
 ```
 .copr/Makefile            COPR SCM 的 "make srpm" 入口（全仓库共用）
+.github/workflows/
+  update-versions.yml     每周自动跟进上游版本（见下）
 scripts/
   fetch-sources.sh        按 <包>/sources 清单下载并校验源码
   make-srpm.sh            生成 SRPM（本地和 COPR 走同一份逻辑）
@@ -118,7 +120,23 @@ COPR 项目 → **Settings → Integrations** 复制 webhook URL，然后到 Git
 **Settings → Webhooks → Add webhook**（Content type 选 `application/json`）。
 之后 push 就会触发构建。
 
-想跟着上游自动更新的话，再加一个定时跑 `zed/update.sh` 并提交的 GitHub Action 即可。
+想跟着上游自动更新的话，仓库里已经有 `.github/workflows/update-versions.yml`：
+**每周一 06:00 UTC（北京时间 14:00）** 自动跑一遍每个包目录里的 `update.sh`，有变化就
+提交推送，推完就触发上面的 webhook。也能在 Actions 页面手动触发（`workflow_dispatch`）。
+加新包不用改它，目录里有 `update.sh` 就会被带上。
+
+它每轮做四件事：
+
+1. 逐个包跑 `update.sh`。单个包失败（上游 API 抽风、flatpak 仓库 tag 还没生成…）只记
+   warning，不阻塞其它包，最后统一报错提醒你去看看。
+2. 校验改动：`sources` 清单格式（4 列 + 64 位 sha256）、`Version` 和 sources 里的 URL
+   是否对得上（防止 update.sh 只改了一半）。
+3. 大文件兜底检查（>5MB 就不提交，免得把 tarball 带进 git 历史）。
+4. 提交（`chore: 每周自动更新上游版本`）并 push。
+
+想改成「开 PR 让我 review」而不是直接推 master：把最后那个提交步骤换成
+`peter-evans/create-pull-request`，并给 workflow 加 `pull-requests: write` 权限。
+不想依赖 webhook 的话，也可以在 workflow 里加一步用 `copr-cli` + API token 直接触发重建。
 
 ## 用户怎么装
 
