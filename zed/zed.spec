@@ -32,7 +32,7 @@
 %global __requires_exclude_from ^%{_libdir}/zed/lib/.*$
 
 Name:           zed
-Version:        1.21.0
+Version:        1.22.0
 Release:        1%{?dist}
 Summary:        High-performance, multiplayer code editor
 # 上游 README：primarily GPL-3.0-or-later, with Apache-2.0 components where marked
@@ -161,5 +161,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/%{app_id}.desktop
 %{_datadir}/metainfo/%{app_id}.metainfo.xml
 
 %changelog
+* Thu Oct 01 2026 yadomin <i@yadom.in> - 1.22.0-1
+- Update to 1.22.0
 * Sun Sep 27 2026 Yadomin <i@yadom.in> - 1.21.0-1
 - 首个版本：重打包上游 stable 预编译产物（zed-linux-{x86_64,aarch64}.tar.gz）
