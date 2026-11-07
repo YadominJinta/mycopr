@@ -197,7 +197,13 @@ jobs:
           printf '%s\n' "$COPR_CONFIG" > "$HOME/.config/copr"
           chmod 600 "$HOME/.config/copr"
 
-          pipx install --quiet copr-cli
+          # copr-cli：优先用 pipx（GitHub runner 自带，不走系统 python 的 externally-managed）
+          if command -v pipx > /dev/null 2>&1; then
+            pipx install copr-cli > /dev/null
+          else
+            python3 -m pip install --user --break-system-packages --quiet copr-cli
+          fi
+          command -v copr-cli
 
           # 先做个只读调用，把「token 过期」这种问题变成一句人话
           if ! copr-cli list-package-names "$COPR_PROJECT" > /dev/null; then

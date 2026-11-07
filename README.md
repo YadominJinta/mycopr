@@ -5,8 +5,8 @@ spec 和下载清单入库，源码/产物不入库。
 
 | 包 | 版本 | 上游 | 打包形式 |
 | --- | --- | --- | --- |
-| `zed` | 1.22.0 | [zed-industries/zed](https://github.com/zed-industries/zed) | 重打包官方预编译 tarball |
-| `zen-browser` | 1.22.3b | [zen-browser/desktop](https://github.com/zen-browser/desktop) | 重打包官方预编译 tarball |
+| `zed` | 1.27.0 | [zed-industries/zed](https://github.com/zed-industries/zed) | 重打包官方预编译 tarball |
+| `zen-browser` | 1.24.1b | [zen-browser/desktop](https://github.com/zen-browser/desktop) | 重打包官方预编译 tarball |
 
 ## 目录结构
 
@@ -114,11 +114,37 @@ git add -A && git commit -m "zed: update to x.y.z" && git push
 
 COPR 那边再加一个 SCM 包，Subdirectory 填 `nvim`，其余照抄 zed 的配置。
 
-## 让 COPR 自动重建（可选）
+## 让 COPR 自动重建
+
+有两条路，选一条就行（也可以两条都开）：
+
+### A. 由 GitHub Actions 主动触发（仓库里已经写好了）
+
+`update-versions.yml` 里有一节「触发 COPR 重建」，推送成功后调
+`copr-cli build-package <项目> --name <包名>`。没配 secret 就自动跳过，配了就生效。
+
+1. 打开 <https://copr.fedorainfracloud.org/api/>，把整段 `[copr-cli]` 配置（`login` /
+   `username` / `token` / `copr_url`）复制下来。
+2. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**，
+   名字 `COPR_CONFIG`，值就是刚才那段配置（多行无所谓，原样粘）。
+3. 如果 COPR 项目或用户名以后变了，改 workflow 顶部的 `env.COPR_PROJECT`。
+
+几个细节：
+
+- **包名取的是 spec 里的 `Name:`**（不是目录名：`zen` 目录对应 `zen-browser` 包）。
+  如果 COPR 里的包名起得不一样，这里会报「包不存在」，把 spec 的 Name 改一致即可。
+- **API token 180 天过期**。过期后这步会明确报「认证失败」，去 /api/ 重新生成、更新 secret 即可。
+- 触发前会先跑一个只读的 `copr-cli list-package-names`，所以 token 坏了是明确的报错，
+  而不是一堆看不懂的堆栈。
+
+### B. 用 COPR 那边的 webhook（不用 secret）
 
 COPR 项目 → **Settings → Integrations** 复制 webhook URL，然后到 GitHub 仓库
 **Settings → Webhooks → Add webhook**（Content type 选 `application/json`）。
-之后 push 就会触发构建。
+之后任何 push 都会触发重建 —— 包括每周那个自动更新 commit。
+
+> 两种方式共存也没关系；但注意 webhook 是「仓库有任何 push 就建」，
+> 而 A 是「只有版本变了才建」，平时改 README 不会白跑一次构建。
 
 想跟着上游自动更新的话，仓库里已经有 `.github/workflows/update-versions.yml`：
 **每周一 06:00 UTC（北京时间 14:00）** 自动跑一遍每个包目录里的 `update.sh`，有变化就
