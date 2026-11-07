@@ -1,10 +1,11 @@
-# 每周自动把各个包跟到上游最新版本：跑每个包目录里的 update.sh，
-# 有变化就提交推送（推完 COPR 的 webhook 会自己重建，见 README）。
+# 每周自动把各个包跟到上游最新版本，然后触发 COPR 重建。
+#
+# 两段自动化：
+#   1. 跑每个包目录里的 update.sh；有变化就校验、提交、推送。
+#   2. 推送后调用 copr-cli 按包的 SCM 定义重建（需要 COPR_CONFIG secret，
+#      没配就跳过 —— 那种情况下 COPR 那边配 webhook 也能达到同样效果）。
 #
 # 加新包不用改这个文件：目录里有 update.sh 就会被带上。
-#
-# 想改成「开 PR 让我 review」而不是直接推 master，把最后那个提交步骤换成
-# peter-evans/create-pull-request，并把 permissions 加上 pull-requests: write。
 name: update-versions
 
 on:
@@ -20,6 +21,10 @@ concurrency:
   group: update-versions
   cancel-in-progress: false
 
+env:
+  # COPR 项目名（user/project），触发重建用
+  COPR_PROJECT: yadomin/mycopr
+
 jobs:
   update:
     runs-on: ubuntu-latest
@@ -32,10 +37,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: 逐个包跑 update.sh
+        id: bump
         run: |
           set -euo pipefail
           bumped=()
           failed=()
+          copr_pkgs=()
 
           for dir in */; do
             pkg=${dir%/}
@@ -51,6 +58,8 @@ jobs:
               after=$(awk -F': *' '/^Version:/{print $2; exit}' "$spec")
               if [[ $before != "$after" ]]; then
                 bumped+=("$pkg: $before -> $after")
+                # COPR 里的包名就是 spec 的 Name，不是目录名（zen 目录 -> zen-browser 包）
+                copr_pkgs+=("$(awk -F': *' '/^Name:/{print $2; exit}' "$spec")")
               fi
             else
               # 单个包失败（上游 API 抽风、tag 还没生成…）不影响别的包
@@ -74,7 +83,11 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ ${#bumped[@]} -gt 0 ]]; then
-            printf -- '- %s\n' "${bumped[@]}" > /tmp/bumped.txt
+            printf '%s\n' "${bumped[@]}" > /tmp/bumped.txt
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "packages=${copr_pkgs[*]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
           if [[ ${#failed[@]} -gt 0 ]]; then
             printf '%s\n' "${failed[@]}" > /tmp/failed.txt
@@ -101,13 +114,25 @@ jobs:
             echo "  $src OK（$(grep -cvE '^#|^$' "$src") 条）"
           done
 
-          # 版本号和 sources 里的 URL 要对得上（防止 update.sh 只改了一半）
+          # Version 和 sources 里的 URL 要对得上，防止 update.sh 只改了一半。
+          # 上游 tag 可能带 v 前缀（zed 是 v1.26.2，zen 是 1.22.3b），两种都认。
           for spec in $(git diff --name-only -- '*.spec'); do
             pkg=$(dirname "$spec")
             version=$(awk -F': *' '/^Version:/{print $2; exit}' "$spec")
-            grep -q "/$version/" "$pkg/sources" \
-              || { echo "::error::$pkg/sources 里找不到版本 $version，更新不完整"; exit 1; }
-            echo "  $spec Version=$version OK"
+            if ! grep -qE '^Source[0-9]*:[[:space:]].*%\{version\}' "$spec"; then
+              # Source 不是用 %{version} 拼的，URL 里本来就不含版本号，跳过
+              echo "  $spec Version=$version（Source 不含 %{version}，跳过 URL 校验）"
+              continue
+            fi
+            ver_re=$(printf '%s' "$version" | sed 's/[.[\*^$+?(){}|]/\\&/g')
+            if grep -qE "/(v)?${ver_re}([^0-9A-Za-z]|\$)" "$pkg/sources"; then
+              echo "  $spec Version=$version OK"
+            else
+              echo "::error::$pkg/sources 里找不到版本 $version，更新不完整"
+              echo "--- $pkg/sources 里的 URL："
+              grep -oE 'https?://[^[:space:]]+' "$pkg/sources" | sed 's/^/  /'
+              exit 1
+            fi
           done
 
       - name: 提交并推送
@@ -144,7 +169,50 @@ jobs:
 
           git commit -F /tmp/commit-msg.txt
           git push origin "HEAD:${GITHUB_REF_NAME}"
-          echo "已推送，COPR 那边配了 webhook 的话会自动开始重建"
+
+      # COPR 的 API token 有效期 180 天，过期了去 https://copr.fedorainfracloud.org/api/
+      # 重新生成，再更新 secret。没配 secret 时整步跳过。
+      - name: 触发 COPR 重建
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          COPR_CONFIG: ${{ secrets.COPR_CONFIG }}
+        run: |
+          set -euo pipefail
+          if [[ -z ${COPR_CONFIG:-} ]]; then
+            echo "没有配置 COPR_CONFIG secret，跳过触发（COPR 那边配了 webhook 的话会自己重建）"
+            {
+              echo
+              echo "> 未触发 COPR：仓库没配 \`COPR_CONFIG\` secret"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          mkdir -p "$HOME/.config"
+          printf '%s\n' "$COPR_CONFIG" > "$HOME/.config/copr"
+          chmod 600 "$HOME/.config/copr"
+
+          pipx install --quiet copr-cli
+
+          # 先做个只读调用，把「token 过期」这种问题变成一句人话
+          if ! copr-cli list-package-names "$COPR_PROJECT" > /dev/null; then
+            echo "::error::copr-cli 连不上或认证失败：检查 COPR_CONFIG secret 是否过期（token 有效期 180 天）"
+            exit 1
+          fi
+
+          triggered=()
+          for pkg in ${{ steps.bump.outputs.packages }}; do
+            echo "::group::触发 $COPR_PROJECT / $pkg"
+            copr-cli build-package "$COPR_PROJECT" --name "$pkg" --nowait
+            triggered+=("$pkg")
+            echo "::endgroup::"
+          done
+
+          {
+            echo
+            echo "### 已触发 COPR 重建"
+            echo
+            printf -- '- %s\n' "${triggered[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 有失败的包就报错
         if: always()
