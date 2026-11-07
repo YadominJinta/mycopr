@@ -36,6 +36,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 先配好 git 身份：update.sh 写 %changelog 时会读 user.name/user.email，
+      # 不配的话 CI 生成的 changelog 条目会是空的（已经出现过一次）
+      - name: 配置 git 身份
+        run: |
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
       - name: 逐个包跑 update.sh
         id: bump
         run: |
@@ -146,7 +153,6 @@ jobs:
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-
           # 兜一层：别把大文件带进历史（.gitignore 本该挡住，历史是删不掉的）
           while read -r f; do
             if [[ ! -f $f ]]; then

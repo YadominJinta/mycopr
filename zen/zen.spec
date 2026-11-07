@@ -162,7 +162,7 @@ appstream-util validate-relax --nonet %{buildroot}%{_datadir}/metainfo/%{app_id}
 %{_datadir}/metainfo/%{app_id}.metainfo.xml
 
 %changelog
-* Mon Oct 05 2026  <> - 1.23b-1
+* Mon Oct 05 2026 github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com> - 1.23b-1
 - Update to 1.23b
 * Sun Sep 27 2026 Yadomin <i@yadom.in> - 1.22.3b-1
 - 首个版本：重打包上游预编译产物（zen.linux-{x86_64,aarch64}.tar.xz），
