@@ -35,7 +35,7 @@
 %global __requires_exclude ^(%%(find %{buildroot}%{appdir} -name '*.so' | xargs -n1 basename | sort -u | paste -s -d '|' -))
 
 Name:           zen-browser
-Version:        1.23b
+Version:        1.24.1b
 Release:        1%{?dist}
 Summary:        Privacy-focused web browser based on Firefox
 # 上游 metainfo 里写的就是 MPL-2.0（tarball 里还带了一批第三方组件，许可清单打包在 omni.ja 中）
@@ -162,6 +162,8 @@ appstream-util validate-relax --nonet %{buildroot}%{_datadir}/metainfo/%{app_id}
 %{_datadir}/metainfo/%{app_id}.metainfo.xml
 
 %changelog
+* Sat Nov 07 2026 github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com> - 1.24.1b-1
+- Update to 1.24.1b
 * Mon Oct 05 2026 github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com> - 1.23b-1
 - Update to 1.23b
 * Sun Sep 27 2026 Yadomin <i@yadom.in> - 1.22.3b-1

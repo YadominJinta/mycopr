@@ -3,8 +3,8 @@
 #
 # 注意 zed 的两个 tarball 都写成 all：COPR 一次构建只生成一个 SRPM、所有 chroot 共用，
 # 所以 SRPM 里必须两个架构的包都有，构建时由 spec 用 %ifarch 选一个解包。
-zed-linux-x86_64.tar.gz	all	5ce3991b34a8fad0a23625f5821cda601c7150a6cc69683c097b8d1b083abc50	https://github.com/zed-industries/zed/releases/download/v1.22.0/zed-linux-x86_64.tar.gz
-zed-linux-aarch64.tar.gz	all	8b3c5d6e506056a9456ed33072081fd64db84ce47cdf34d4936442cc4f08394a	https://github.com/zed-industries/zed/releases/download/v1.22.0/zed-linux-aarch64.tar.gz
-zed.metainfo.xml.in	all	7ef9505c4a11ed02eccd22aa8dc7a1c7b07f87a566c639e6fc469d9f7ea34a4c	https://raw.githubusercontent.com/zed-industries/zed/v1.22.0/crates/zed/resources/flatpak/zed.metainfo.xml.in
-LICENSE-APACHE	all	752daf2fb234ca4a1fa372c073fe127f44b7b90fd2529ae44273a64f9d53da7a	https://raw.githubusercontent.com/zed-industries/zed/v1.22.0/LICENSE-APACHE
-LICENSE-GPL	all	0aa0322ea494da441088e4d9144c6720bf99d9e2e1eefcd29d1f58b19b5c4246	https://raw.githubusercontent.com/zed-industries/zed/v1.22.0/LICENSE-GPL
+zed-linux-x86_64.tar.gz	all	719f6bf649ea8d87961adbf728e178561bac3f598d72d7949558d1150cfc43dd	https://github.com/zed-industries/zed/releases/download/v1.27.0/zed-linux-x86_64.tar.gz
+zed-linux-aarch64.tar.gz	all	9e4f8b182f41d4cd434cbbc6d1562329a33ef048d65a39bae0665465d0a638bb	https://github.com/zed-industries/zed/releases/download/v1.27.0/zed-linux-aarch64.tar.gz
+zed.metainfo.xml.in	all	7ef9505c4a11ed02eccd22aa8dc7a1c7b07f87a566c639e6fc469d9f7ea34a4c	https://raw.githubusercontent.com/zed-industries/zed/v1.27.0/crates/zed/resources/flatpak/zed.metainfo.xml.in
+LICENSE-APACHE	all	752daf2fb234ca4a1fa372c073fe127f44b7b90fd2529ae44273a64f9d53da7a	https://raw.githubusercontent.com/zed-industries/zed/v1.27.0/LICENSE-APACHE
+LICENSE-GPL	all	0aa0322ea494da441088e4d9144c6720bf99d9e2e1eefcd29d1f58b19b5c4246	https://raw.githubusercontent.com/zed-industries/zed/v1.27.0/LICENSE-GPL
